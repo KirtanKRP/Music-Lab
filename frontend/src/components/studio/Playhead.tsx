@@ -2,7 +2,7 @@
 
 import { useRef } from "react";
 import { usePlayheadSync } from "@/hooks/usePlayheadSync";
-import { PIXELS_PER_SECOND } from "@/lib/constants";
+import { PIXELS_PER_SECOND } from "@/lib/constants/index";
 
 /**
  * Playhead — the vertical red scrubber line that moves across the timeline.

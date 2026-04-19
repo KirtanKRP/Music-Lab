@@ -1,7 +1,6 @@
 "use client";
 
 import type { AudioTrack } from "@/store/useStudioStore";
-import useStudioStore from "@/store/useStudioStore";
 import RegionBlock from "./RegionBlock";
 
 /**
@@ -14,8 +13,6 @@ interface TrackRowProps {
 }
 
 export default function TrackRow({ track, index }: TrackRowProps) {
-  const toggleTrackMute = useStudioStore((s) => s.toggleTrackMute);
-
   return (
     <div
       className={`h-20 border-b border-gray-800/50 relative ${

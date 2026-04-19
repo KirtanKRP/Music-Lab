@@ -8,6 +8,7 @@ import { getMarketTracks, MarketTrack } from "@/lib/api/marketClient";
 import MarketTrackCard from "@/components/market/MarketTrackCard";
 import TrackDetailsModal from "@/components/market/TrackDetailsModal";
 import MarketAudioPlayer from "@/components/market/MarketAudioPlayer";
+import LoadingSpinner from "@/components/ui/LoadingSpinner";
 
 export default function WishlistPage() {
   const { wishlist } = useMarketStore();
@@ -46,9 +47,7 @@ export default function WishlistPage() {
         {/* Content */}
         <main className="flex-1 px-8 py-8 pb-32">
           {loading ? (
-            <div className="flex justify-center py-20 text-gray-400 font-bold animate-pulse">
-              Loading your library...
-            </div>
+            <LoadingSpinner text="Loading your library..." />
           ) : wishlistedTracks.length === 0 ? (
             <div className="text-center py-20">
               <div className="w-20 h-20 bg-pink-50 rounded-full flex items-center justify-center mx-auto mb-6">

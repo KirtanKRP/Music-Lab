@@ -1,6 +1,5 @@
 import { useEffect, useRef, type RefObject } from "react";
 import AudioEngine from "@/lib/audio/AudioEngine";
-import { PIXELS_PER_SECOND } from "@/lib/constants";
 
 /**
  * Custom hook that synchronizes the visual playhead to Tone.Transport

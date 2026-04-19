@@ -1,7 +1,7 @@
 "use client";
 
 import type { AudioRegion } from "@/store/useStudioStore";
-import { PIXELS_PER_SECOND } from "@/lib/constants";
+import { PIXELS_PER_SECOND } from "@/lib/constants/index";
 
 /**
  * RegionBlock — visual representation of an audio clip on the timeline.

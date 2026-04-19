@@ -8,11 +8,13 @@ import MarketTrackCard from "./MarketTrackCard";
 import TrackDetailsModal from "./TrackDetailsModal";
 import CartDrawer from "./CartDrawer";
 import MarketAudioPlayer from "./MarketAudioPlayer";
+import LoadingSpinner from "@/components/ui/LoadingSpinner";
 
 export default function MarketplaceView() {
   const [tracks, setTracks] = useState<MarketTrack[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedTrack, setSelectedTrack] = useState<MarketTrack | null>(null);
+  const [backendStatus, setBackendStatus] = useState<'loading' | 'connected' | 'offline'>('loading');
 
   // Filters state
   const [searchQuery, setSearchQuery] = useState("");
@@ -25,10 +27,15 @@ export default function MarketplaceView() {
     getMarketTracks()
       .then((data) => {
         setTracks(data);
-        // FIX: Set allTracks in the store so skip/prev/next buttons work
         setAllTracks(data);
+        // Track IDs 101-112 are mock fallback data defined in marketClient.ts
+        // If all IDs are in that range, backend was offline
+        const hasRealData = data.some(t => t.id < 101 || t.id > 112);
+        setBackendStatus(hasRealData ? 'connected' : 'offline');
       })
-      .catch((err) => console.error("[Marketplace] Failed to fetch:", err))
+      .catch(() => {
+        setBackendStatus('offline');
+      })
       .finally(() => setLoading(false));
   }, [setAllTracks]);
 
@@ -70,6 +77,24 @@ export default function MarketplaceView() {
             Music<span className="text-violet-600">Lab</span>
             <span className="text-gray-400 font-medium text-sm ml-2.5">Marketplace</span>
           </h1>
+        </div>
+
+        {/* Backend Status Badge */}
+        <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-bold ${
+          backendStatus === 'connected'
+            ? 'bg-emerald-50 border-emerald-200 text-emerald-600'
+            : backendStatus === 'offline'
+            ? 'bg-amber-50 border-amber-200 text-amber-600'
+            : 'bg-gray-50 border-gray-200 text-gray-400'
+        }`}>
+          <span className={`w-1.5 h-1.5 rounded-full ${
+            backendStatus === 'connected' ? 'bg-emerald-500'
+            : backendStatus === 'offline' ? 'bg-amber-500 animate-pulse'
+            : 'bg-gray-300 animate-pulse'}`}
+          />
+          {backendStatus === 'connected' ? 'Live DB'
+           : backendStatus === 'offline' ? 'Demo Mode'
+           : 'Connecting...'}
         </div>
 
         {/* Global Toolbar (Upload, Wishlist, Cart) */}
@@ -149,7 +174,7 @@ export default function MarketplaceView() {
         {/* Track Grid */}
         <div className="px-8 max-w-[1600px] mx-auto pb-12">
           {loading ? (
-             <div className="flex justify-center py-20 text-gray-400 font-bold animate-pulse">Loading Premium Tracks...</div>
+             <LoadingSpinner text="Loading Premium Tracks..." />
           ) : filteredAndSortedTracks.length === 0 ? (
              <div className="text-center py-20">
                 <span className="text-6xl mb-4 block">🎧</span>

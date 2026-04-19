@@ -44,14 +44,6 @@ export default function MarketAudioPlayer() {
     }
   }, [activePreviewTrack, isPreviewPlaying, pausePreview]);
 
-  // Reset audio when track changes
-  useEffect(() => {
-    if (audioRef.current && activePreviewTrack) {
-      audioRef.current.currentTime = 0;
-      setCurrentTime(0);
-    }
-  }, [activePreviewTrack?.id]);
-
   const handleTimeUpdate = useCallback(() => {
     if (!audioRef.current) return;
     setCurrentTime(audioRef.current.currentTime);
