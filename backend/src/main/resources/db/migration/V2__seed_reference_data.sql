@@ -1,4 +1,4 @@
-lso -- Seed baseline records used by local/demo flows.
+-- Seed baseline records used by local/demo flows.
 -- This migration is idempotent and safe for pre-seeded databases.
 
 insert into users (username, email, password_hash, wallet_balance)

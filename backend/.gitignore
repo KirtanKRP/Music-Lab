@@ -36,3 +36,7 @@ build/
 .env
 .env.*
 !.env.example
+
+# Generated runtime uploads
+storage/audio/*
+!storage/audio/.gitkeep

@@ -13,6 +13,7 @@ public class StudioSyncMessage {
     private String actionType;       // e.g., "PLAYHEAD_MOVE", "TRACK_MUTE", "TRACK_UNMUTE", "BPM_CHANGE"
     private double playheadPosition;
     private String trackId;
+    private String sourceClientId;
 
     // Default constructor (required for JSON deserialization)
     public StudioSyncMessage() {}
@@ -58,9 +59,18 @@ public class StudioSyncMessage {
         this.trackId = trackId;
     }
 
+    public String getSourceClientId() {
+        return sourceClientId;
+    }
+
+    public void setSourceClientId(String sourceClientId) {
+        this.sourceClientId = sourceClientId;
+    }
+
     @Override
     public String toString() {
         return "StudioSyncMessage{projectId='" + projectId + "', actionType='" + actionType
-                + "', playheadPosition=" + playheadPosition + ", trackId='" + trackId + "'}";
+                + "', playheadPosition=" + playheadPosition + ", trackId='" + trackId
+                + "', sourceClientId='" + sourceClientId + "'}";
     }
 }
