@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import useStudioStore from "@/store/useStudioStore";
+import { useAuthStore } from "@/store/useAuthStore";
 import AudioEngine from "@/lib/audio/AudioEngine";
 import { uploadAudioFile, getStreamUrl } from "@/lib/api/audioClient";
 import { saveProject, loadProject } from "@/lib/api/projectClient";
@@ -15,8 +16,9 @@ import { PIXELS_PER_SECOND } from "@/lib/constants/index";
  * Enhanced with drag-and-drop, metronome, volume knobs, and a realistic DAW experience.
  */
 export default function StudioLayout() {
-  const { isPlaying, isRehydrating, bpm, tracks, currentProjectId, togglePlay, setBpm, addTrack, addRegionToTrack, removeTrack, hydrateProject, setRehydrating, toggleTrackMute } =
+  const { isPlaying, isRehydrating, bpm, tracks, currentProjectId, togglePlay, setBpm, addTrack, removeTrack, hydrateProject, setRehydrating, setCurrentProjectId, toggleTrackMute } =
     useStudioStore();
+  const user = useAuthStore((state) => state.user);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragOverTimeline, setDragOverTimeline] = useState(false);
@@ -26,6 +28,19 @@ export default function StudioLayout() {
   const [masterVolume, setMasterVolume] = useState(80);
   const [elapsedTime, setElapsedTime] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Keep a stable project ID in local storage so Save, Load, and WebSocket use the same room.
+  useEffect(() => {
+    const storedProjectId = localStorage.getItem("musiclab_current_project_id");
+    if (storedProjectId) {
+      setCurrentProjectId(storedProjectId);
+      return;
+    }
+
+    const generatedProjectId = `project-${Date.now()}`;
+    localStorage.setItem("musiclab_current_project_id", generatedProjectId);
+    setCurrentProjectId(generatedProjectId);
+  }, [setCurrentProjectId]);
 
   // Timer for elapsed playback time — reads from AudioEngine
   useEffect(() => {
@@ -70,6 +85,12 @@ export default function StudioLayout() {
   // WebSocket initialization
   useEffect(() => {
     const socket = StudioSocketClient.getInstance();
+
+    if (!currentProjectId) {
+      socket.disconnect();
+      return;
+    }
+
     socket.connect(currentProjectId, (msg) => {
       if (msg.actionType === "TRACK_MUTE" && msg.trackId) {
         useStudioStore.getState().toggleTrackMute(msg.trackId, true);
@@ -169,10 +190,13 @@ export default function StudioLayout() {
 
   const handleSaveProject = useCallback(async () => {
     const state = useStudioStore.getState();
+    const activeProjectId = state.currentProjectId || `project-${Date.now()}`;
+    const activeUserId = user?.id ? String(user.id) : "1";
+
     try {
-      await saveProject({
-        projectId: `project-${Date.now()}`,
-        userId: "1",
+      const result = await saveProject({
+        projectId: activeProjectId,
+        userId: activeUserId,
         projectName: "My Music Project",
         bpm: state.bpm,
         tracks: state.tracks.map((track) => ({
@@ -180,13 +204,28 @@ export default function StudioLayout() {
           regions: track.regions.map((r) => ({ sampleId: r.sampleId, startTime: r.startTime, duration: r.duration, audioFileUrl: r.audioFileUrl })),
         })),
       });
-      alert("Project Saved!");
+
+      setCurrentProjectId(result.projectId);
+      localStorage.setItem("musiclab_current_project_id", result.projectId);
+
+      if (navigator.clipboard?.writeText) {
+        try {
+          await navigator.clipboard.writeText(result.projectId);
+        } catch {
+          // Clipboard can fail on unsupported/non-secure contexts; save still succeeds.
+        }
+      }
+
+      alert(`Project Saved!\nProject ID: ${result.projectId}\n(Also copied to clipboard)`);
     } catch { alert("Failed to save project."); }
-  }, []);
+  }, [setCurrentProjectId, user?.id]);
 
   const handleLoadProject = useCallback(async () => {
-    const projectId = prompt("Enter Project ID to load:");
+    const suggestedProjectId = localStorage.getItem("musiclab_current_project_id") ?? "";
+    const projectIdInput = prompt("Enter Project ID to load:", suggestedProjectId);
+    const projectId = projectIdInput?.trim() ?? "";
     if (!projectId) return;
+
     try {
       setRehydrating(true);
       const engine = AudioEngine.getInstance();
@@ -204,9 +243,12 @@ export default function StudioLayout() {
           await engine.loadRegion(region.sampleId, region.audioFileUrl, region.startTime);
         }
       }
+
+      setCurrentProjectId(projectId);
+      localStorage.setItem("musiclab_current_project_id", projectId);
       alert("Project loaded!");
     } catch { alert("Failed to load project."); } finally { setRehydrating(false); }
-  }, [hydrateProject, setRehydrating]);
+  }, [hydrateProject, setCurrentProjectId, setRehydrating]);
 
   // Add new empty track
   const handleAddTrack = useCallback(() => {
@@ -291,6 +333,10 @@ export default function StudioLayout() {
               </svg>
               {isRehydrating ? "..." : "Load"}
             </button>
+            <div className="h-8 px-2.5 rounded-lg border border-gray-200 bg-gray-50 flex items-center text-[10px] text-gray-500">
+              <span className="mr-1 font-semibold text-gray-600">ID:</span>
+              <span className="font-mono text-[11px] text-gray-700">{currentProjectId || "N/A"}</span>
+            </div>
           </div>
         </div>
 

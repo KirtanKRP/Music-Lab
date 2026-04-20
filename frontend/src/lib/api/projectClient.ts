@@ -23,6 +23,13 @@ export interface MusicProjectPayload {
   }[];
 }
 
+export interface SaveProjectResponse {
+  status: string;
+  message: string;
+  projectId: string;
+  projectName: string;
+}
+
 /**
  * Saves a MusicProject to the Java backend.
  * The backend will:
@@ -32,7 +39,7 @@ export interface MusicProjectPayload {
  *
  * @param projectData - The project payload matching the Java POJO structure
  */
-export async function saveProject(projectData: MusicProjectPayload): Promise<void> {
+export async function saveProject(projectData: MusicProjectPayload): Promise<SaveProjectResponse> {
   const response = await fetch(`${API_BASE_URL}/api/v1/studio/save`, {
     method: "POST",
     headers: {
@@ -45,6 +52,8 @@ export async function saveProject(projectData: MusicProjectPayload): Promise<voi
     const error = await response.json().catch(() => ({ message: "Save failed" }));
     throw new Error(error.message || `Save failed with status ${response.status}`);
   }
+
+  return response.json();
 }
 
 /**

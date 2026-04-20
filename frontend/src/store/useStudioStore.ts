@@ -57,7 +57,7 @@ const useStudioStore = create<StudioStore>((set) => ({
   isRehydrating: false,
   bpm: 120,
   tracks: [],
-  currentProjectId: "proj-123",
+  currentProjectId: "",
 
   // ── Actions ──
   togglePlay: () => set((state) => ({ isPlaying: !state.isPlaying })),

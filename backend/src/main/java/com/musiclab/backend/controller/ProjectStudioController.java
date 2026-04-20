@@ -82,14 +82,15 @@ public class ProjectStudioController {
         logger.info("Received save request for project: {} (ID: {})", project.getProjectName(), project.getProjectId());
 
         try {
-            // Hardcode userId = 1L until JWT authentication is implemented
-            projectManagementService.saveProjectState(project, 1L);
+            Long ownerUserId = resolveUserId(project);
+            projectManagementService.saveProjectState(project, ownerUserId);
 
             Map<String, Object> response = Map.of(
                     "status", "success",
                     "message", "Project saved successfully (Serialized via ObjectOutputStream → DB)",
                     "projectId", project.getProjectId(),
-                    "projectName", project.getProjectName()
+                "projectName", project.getProjectName(),
+                "ownerUserId", ownerUserId
             );
 
             return ResponseEntity.ok(response);
@@ -100,6 +101,20 @@ public class ProjectStudioController {
                     "status", "error",
                     "message", "Failed to save project: " + e.getMessage()
             ));
+        }
+    }
+
+    private Long resolveUserId(MusicProject project) {
+        String payloadUserId = project.getUserId();
+        if (payloadUserId == null || payloadUserId.isBlank()) {
+            return 1L;
+        }
+
+        try {
+            return Long.parseLong(payloadUserId);
+        } catch (NumberFormatException e) {
+            logger.warn("Invalid userId '{}' in save payload. Falling back to userId=1", payloadUserId);
+            return 1L;
         }
     }
 
