@@ -16,7 +16,7 @@ import { PIXELS_PER_SECOND } from "@/lib/constants/index";
  * Enhanced with drag-and-drop, metronome, volume knobs, and a realistic DAW experience.
  */
 export default function StudioLayout() {
-  const { isPlaying, isRehydrating, bpm, tracks, currentProjectId, togglePlay, setBpm, addTrack, removeTrack, hydrateProject, setRehydrating, setCurrentProjectId, toggleTrackMute } =
+  const { isPlaying, isRehydrating, bpm, tracks, currentProjectId, setPlaying, setBpm, addTrack, removeTrack, hydrateProject, setRehydrating, setCurrentProjectId, toggleTrackMute } =
     useStudioStore();
   const user = useAuthStore((state) => state.user);
 
@@ -27,7 +27,34 @@ export default function StudioLayout() {
   const [showInstruments, setShowInstruments] = useState(false);
   const [masterVolume, setMasterVolume] = useState(80);
   const [elapsedTime, setElapsedTime] = useState(0);
+  const [isSocketConnected, setIsSocketConnected] = useState(false);
+  const [isAudioUnlocked, setIsAudioUnlocked] = useState(false);
+  const [needsAudioUnlock, setNeedsAudioUnlock] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const applyTrackMuteToEngine = useCallback((trackId: string) => {
+    const track = useStudioStore.getState().tracks.find((t) => t.trackId === trackId);
+    if (!track) return;
+
+    const engine = AudioEngine.getInstance();
+    for (const region of track.regions) {
+      engine.setPlayerMute(region.sampleId, track.isMuted);
+    }
+  }, []);
+
+  const broadcastStudioEvent = useCallback(
+    (actionType: string, trackId: string = "", playheadPosition: number = 0, nextBpm?: number) => {
+      if (!currentProjectId) return;
+      StudioSocketClient.getInstance().sendSyncEvent(
+        currentProjectId,
+        actionType,
+        trackId,
+        playheadPosition,
+        nextBpm
+      );
+    },
+    [currentProjectId]
+  );
 
   // Keep a stable project ID in local storage so Save, Load, and WebSocket use the same room.
   useEffect(() => {
@@ -41,6 +68,38 @@ export default function StudioLayout() {
     localStorage.setItem("musiclab_current_project_id", generatedProjectId);
     setCurrentProjectId(generatedProjectId);
   }, [setCurrentProjectId]);
+
+  // Poll lightweight runtime status for demo-friendly visibility.
+  useEffect(() => {
+    const updateStatus = () => {
+      const socket = StudioSocketClient.getInstance();
+      const sameProjectRoom = !!currentProjectId && socket.getCurrentProjectId() === currentProjectId;
+      setIsSocketConnected(socket.isConnected() && sameProjectRoom);
+      setIsAudioUnlocked(AudioEngine.getInstance().isInitialized());
+    };
+
+    updateStatus();
+    const intervalId = setInterval(updateStatus, 400);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [currentProjectId]);
+
+  const handleUnlockAudio = useCallback(async () => {
+    const engine = AudioEngine.getInstance();
+
+    try {
+      if (!engine.isInitialized()) {
+        await engine.initialize();
+      }
+
+      setIsAudioUnlocked(true);
+      setNeedsAudioUnlock(false);
+    } catch {
+      alert("Audio unlock failed. Try clicking the Unlock Audio button again.");
+    }
+  }, []);
 
   // Timer for elapsed playback time — reads from AudioEngine
   useEffect(() => {
@@ -82,7 +141,7 @@ export default function StudioLayout() {
     };
   }, [metronomeOn, isPlaying, bpm]);
 
-  // WebSocket initialization
+  // WebSocket initialization + incoming remote event application
   useEffect(() => {
     const socket = StudioSocketClient.getInstance();
 
@@ -91,35 +150,142 @@ export default function StudioLayout() {
       return;
     }
 
-    socket.connect(currentProjectId, (msg) => {
-      if (msg.actionType === "TRACK_MUTE" && msg.trackId) {
-        useStudioStore.getState().toggleTrackMute(msg.trackId, true);
+    socket.connect(currentProjectId, async (msg) => {
+      const engine = AudioEngine.getInstance();
+      const ensureEngineReady = async (): Promise<boolean> => {
+        if (engine.isInitialized()) {
+          setIsAudioUnlocked(true);
+          return true;
+        }
+
+        try {
+          await engine.initialize();
+          setIsAudioUnlocked(true);
+          setNeedsAudioUnlock(false);
+          return true;
+        } catch {
+          setIsAudioUnlocked(false);
+          setNeedsAudioUnlock(true);
+          console.warn("[StudioSocket] Remote event ignored until audio is unlocked by user interaction.");
+          return false;
+        }
+      };
+
+      switch (msg.actionType) {
+        case "TRACK_MUTE": {
+          if (!msg.trackId) return;
+          useStudioStore.getState().toggleTrackMute(msg.trackId, true);
+          applyTrackMuteToEngine(msg.trackId);
+          return;
+        }
+
+        case "PLAY": {
+          if (!(await ensureEngineReady())) return;
+
+          if (typeof msg.bpm === "number") {
+            const clampedRemoteBpm = Math.max(20, Math.min(300, msg.bpm));
+            setBpm(clampedRemoteBpm);
+            engine.setBpm(clampedRemoteBpm);
+          }
+
+          if (typeof msg.playheadPosition === "number") {
+            const targetSeconds = Math.max(0, msg.playheadPosition);
+            engine.seek(targetSeconds);
+            setElapsedTime(targetSeconds);
+          }
+
+          engine.play();
+          setPlaying(true);
+          return;
+        }
+
+        case "PAUSE": {
+          if (!(await ensureEngineReady())) return;
+          if (typeof msg.playheadPosition === "number") {
+            const targetSeconds = Math.max(0, msg.playheadPosition);
+            engine.seek(targetSeconds);
+            setElapsedTime(targetSeconds);
+          }
+          engine.pause();
+          setPlaying(false);
+          return;
+        }
+
+        case "STOP": {
+          if (!(await ensureEngineReady())) return;
+          engine.stop();
+          setPlaying(false);
+          setElapsedTime(0);
+          return;
+        }
+
+        case "SEEK": {
+          if (!(await ensureEngineReady())) return;
+          if (typeof msg.playheadPosition === "number") {
+            const targetSeconds = Math.max(0, msg.playheadPosition);
+            engine.seek(targetSeconds);
+            setElapsedTime(targetSeconds);
+          }
+          return;
+        }
+
+        case "BPM_CHANGE": {
+          if (typeof msg.bpm !== "number") return;
+          const clampedRemoteBpm = Math.max(20, Math.min(300, msg.bpm));
+          setBpm(clampedRemoteBpm);
+
+          if (await ensureEngineReady()) {
+            engine.setBpm(clampedRemoteBpm);
+          }
+          return;
+        }
+
+        default:
+          return;
       }
     });
     return () => { socket.disconnect(); };
-  }, [currentProjectId]);
+  }, [applyTrackMuteToEngine, currentProjectId, setBpm, setPlaying]);
 
   const handlePlayPause = useCallback(async () => {
     const engine = AudioEngine.getInstance();
-    if (!engine.isInitialized()) await engine.initialize();
-    if (isPlaying) { engine.pause(); } else { engine.play(); }
-    togglePlay();
-  }, [isPlaying, togglePlay]);
+    if (!engine.isInitialized()) {
+      await engine.initialize();
+      setIsAudioUnlocked(true);
+      setNeedsAudioUnlock(false);
+    }
+
+    if (isPlaying) {
+      const pauseAt = engine.getCurrentTime();
+      engine.pause();
+      setPlaying(false);
+      broadcastStudioEvent("PAUSE", "", pauseAt, bpm);
+      return;
+    }
+
+    const startAt = engine.getCurrentTime();
+    engine.play();
+    setPlaying(true);
+    broadcastStudioEvent("PLAY", "", startAt, bpm);
+  }, [bpm, broadcastStudioEvent, isPlaying, setPlaying]);
 
   const handleStop = useCallback(() => {
     const engine = AudioEngine.getInstance();
     engine.stop();
-    useStudioStore.getState().setPlaying(false);
+    setPlaying(false);
     setElapsedTime(0);
-  }, []);
+    broadcastStudioEvent("STOP", "", 0, bpm);
+  }, [bpm, broadcastStudioEvent, setPlaying]);
 
   const handleBpmChange = useCallback(
     (newBpm: number) => {
       const clampedBpm = Math.max(20, Math.min(300, newBpm));
       setBpm(clampedBpm);
-      AudioEngine.getInstance().setBpm(clampedBpm);
+      const engine = AudioEngine.getInstance();
+      engine.setBpm(clampedBpm);
+      broadcastStudioEvent("BPM_CHANGE", "", engine.getCurrentTime(), clampedBpm);
     },
-    [setBpm]
+    [broadcastStudioEvent, setBpm]
   );
 
   // Unified file handler for both click-upload and drag-drop
@@ -127,7 +293,11 @@ export default function StudioLayout() {
     async (file: File) => {
       try {
         const engine = AudioEngine.getInstance();
-        if (!engine.isInitialized()) await engine.initialize();
+        if (!engine.isInitialized()) {
+          await engine.initialize();
+          setIsAudioUnlocked(true);
+          setNeedsAudioUnlock(false);
+        }
 
         const uploadResult = await uploadAudioFile(file);
         const streamUrl = getStreamUrl(uploadResult.streamUrl);
@@ -229,7 +399,11 @@ export default function StudioLayout() {
     try {
       setRehydrating(true);
       const engine = AudioEngine.getInstance();
-      if (!engine.isInitialized()) await engine.initialize();
+      if (!engine.isInitialized()) {
+        await engine.initialize();
+        setIsAudioUnlocked(true);
+        setNeedsAudioUnlock(false);
+      }
       engine.disposeAll();
       const data = await loadProject(projectId);
       const hydratedTracks = (data.tracks || []).map((t: { trackId: string; name: string; volume: number; isMuted: boolean; regions: { sampleId: string; startTime: number; duration: number; audioFileUrl: string; }[] }) => ({
@@ -260,24 +434,20 @@ export default function StudioLayout() {
   // Mute/unmute with AudioEngine sync
   const handleToggleMute = useCallback((trackId: string) => {
     toggleTrackMute(trackId, false);
-    // After toggle, read new state and sync to AudioEngine
-    const track = useStudioStore.getState().tracks.find(t => t.trackId === trackId);
-    if (track) {
-      const engine = AudioEngine.getInstance();
-      for (const region of track.regions) {
-        engine.setPlayerMute(region.sampleId, track.isMuted);
-      }
-    }
-  }, [toggleTrackMute]);
+    applyTrackMuteToEngine(trackId);
+  }, [applyTrackMuteToEngine, toggleTrackMute]);
 
   // Click & drag on ruler to seek
   const handleRulerMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault();
     const rulerEl = e.currentTarget;
+    let latestTime = 0;
+
     const seekTo = (clientX: number) => {
       const rect = rulerEl.getBoundingClientRect();
       const x = clientX - rect.left;
       const time = Math.max(0, x / PIXELS_PER_SECOND);
+      latestTime = time;
       AudioEngine.getInstance().seek(time);
       setElapsedTime(time);
     };
@@ -287,11 +457,18 @@ export default function StudioLayout() {
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
       document.body.style.cursor = "";
+      broadcastStudioEvent("SEEK", "", latestTime);
     };
     document.body.style.cursor = "col-resize";
     document.addEventListener("mousemove", onMove);
     document.addEventListener("mouseup", onUp);
-  }, []);
+  }, [broadcastStudioEvent]);
+
+  const handlePlayheadSeekCommit = useCallback((seconds: number) => {
+    const clamped = Math.max(0, seconds);
+    setElapsedTime(clamped);
+    broadcastStudioEvent("SEEK", "", clamped);
+  }, [broadcastStudioEvent]);
 
   // Format time for display
   const formatTime = (t: number) => {
@@ -337,6 +514,35 @@ export default function StudioLayout() {
               <span className="mr-1 font-semibold text-gray-600">ID:</span>
               <span className="font-mono text-[11px] text-gray-700">{currentProjectId || "N/A"}</span>
             </div>
+            <div className={`h-8 px-2.5 rounded-lg border flex items-center text-[10px] ${
+              isSocketConnected
+                ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+                : "bg-amber-50 border-amber-200 text-amber-700"
+            }`}>
+              <span className="mr-1 font-semibold">Sync:</span>
+              <span className="font-semibold">{isSocketConnected ? "Connected" : "Connecting"}</span>
+            </div>
+            <div className={`h-8 px-2.5 rounded-lg border flex items-center text-[10px] ${
+              isAudioUnlocked
+                ? "bg-cyan-50 border-cyan-200 text-cyan-700"
+                : "bg-rose-50 border-rose-200 text-rose-700"
+            }`}>
+              <span className="mr-1 font-semibold">Audio:</span>
+              <span className="font-semibold">{isAudioUnlocked ? "Unlocked" : "Locked"}</span>
+            </div>
+            <button
+              onClick={handleUnlockAudio}
+              disabled={isAudioUnlocked}
+              className="h-8 px-3 rounded-lg bg-indigo-500 hover:bg-indigo-600 disabled:bg-gray-300 text-white text-[10px] font-semibold transition-colors"
+              title="Unlock browser audio context"
+            >
+              Unlock Audio
+            </button>
+            {needsAudioUnlock && (
+              <div className="h-8 px-2 rounded-lg border border-rose-200 bg-rose-50 flex items-center text-[10px] text-rose-700 font-medium">
+                Remote event pending user click
+              </div>
+            )}
           </div>
         </div>
 
@@ -526,7 +732,7 @@ export default function StudioLayout() {
 
           {/* Track lanes + Playhead */}
           <div className="relative min-h-full" style={{ minWidth: 421 * 50 }}>
-            <Playhead />
+            <Playhead onSeekCommit={handlePlayheadSeekCommit} />
 
             {tracks.length === 0 ? (
               <div className="flex items-center justify-center h-80 text-gray-400">

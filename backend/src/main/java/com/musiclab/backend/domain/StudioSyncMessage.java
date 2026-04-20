@@ -10,9 +10,10 @@ package com.musiclab.backend.domain;
 public class StudioSyncMessage {
 
     private String projectId;
-    private String actionType;       // e.g., "PLAYHEAD_MOVE", "TRACK_MUTE", "TRACK_UNMUTE", "BPM_CHANGE"
+    private String actionType;       // e.g., "PLAY", "PAUSE", "STOP", "SEEK", "TRACK_MUTE", "BPM_CHANGE"
     private double playheadPosition;
     private String trackId;
+    private Integer bpm;
     private String sourceClientId;
 
     // Default constructor (required for JSON deserialization)
@@ -67,10 +68,18 @@ public class StudioSyncMessage {
         this.sourceClientId = sourceClientId;
     }
 
+    public Integer getBpm() {
+        return bpm;
+    }
+
+    public void setBpm(Integer bpm) {
+        this.bpm = bpm;
+    }
+
     @Override
     public String toString() {
         return "StudioSyncMessage{projectId='" + projectId + "', actionType='" + actionType
                 + "', playheadPosition=" + playheadPosition + ", trackId='" + trackId
-                + "', sourceClientId='" + sourceClientId + "'}";
+                + "', bpm=" + bpm + ", sourceClientId='" + sourceClientId + "'}";
     }
 }

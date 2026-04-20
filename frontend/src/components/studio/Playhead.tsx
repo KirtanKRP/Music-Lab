@@ -11,7 +11,11 @@ import AudioEngine from "@/lib/audio/AudioEngine";
  * without triggering React re-renders (Agent.md §5 compliance).
  * The top handle is draggable — drag it to seek on the timeline.
  */
-export default function Playhead() {
+interface PlayheadProps {
+  onSeekCommit?: (seconds: number) => void;
+}
+
+export default function Playhead({ onSeekCommit }: PlayheadProps) {
   const playheadRef = useRef<HTMLDivElement>(null);
 
   // Hook reads AudioEngine.getCurrentTime() at ~60fps and directly
@@ -23,11 +27,13 @@ export default function Playhead() {
     e.stopPropagation();
     const parent = playheadRef.current?.parentElement;
     if (!parent) return;
+    let latestTime = 0;
 
     const seekTo = (clientX: number) => {
       const rect = parent.getBoundingClientRect();
       const x = clientX - rect.left;
       const time = Math.max(0, x / PIXELS_PER_SECOND);
+      latestTime = time;
       AudioEngine.getInstance().seek(time);
     };
 
@@ -38,11 +44,12 @@ export default function Playhead() {
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
       document.body.style.cursor = "";
+      onSeekCommit?.(latestTime);
     };
     document.body.style.cursor = "col-resize";
     document.addEventListener("mousemove", onMove);
     document.addEventListener("mouseup", onUp);
-  }, []);
+  }, [onSeekCommit]);
 
   return (
     <div

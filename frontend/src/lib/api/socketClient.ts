@@ -92,7 +92,13 @@ class StudioSocketClient {
    * @param actionType - e.g., "TRACK_MUTE", "PLAYHEAD_MOVE", "BPM_CHANGE"
    * @param trackId - The affected track (empty string if not track-specific)
    */
-  sendSyncEvent(projectId: string, actionType: string, trackId: string): void {
+  sendSyncEvent(
+    projectId: string,
+    actionType: string,
+    trackId: string = "",
+    playheadPosition: number = 0,
+    bpm?: number
+  ): void {
     if (!this.client || !this.connected) {
       console.warn("[StudioSocket] Not connected. Cannot send event.");
       return;
@@ -101,10 +107,14 @@ class StudioSocketClient {
     const payload: StudioSyncPayload = {
       projectId,
       actionType,
-      playheadPosition: 0,
+      playheadPosition,
       trackId,
       sourceClientId: this.clientId,
     };
+
+    if (typeof bpm === "number") {
+      payload.bpm = bpm;
+    }
 
     this.client.publish({
       destination: "/app/studio.sync",
@@ -144,6 +154,7 @@ export interface StudioSyncPayload {
   actionType: string;
   playheadPosition: number;
   trackId: string;
+  bpm?: number;
   sourceClientId?: string;
 }
 

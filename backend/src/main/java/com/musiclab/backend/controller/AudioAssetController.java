@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.InvalidMediaTypeException;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -87,8 +88,9 @@ public class AudioAssetController {
         try {
             Resource resource = audioFileStorageService.loadAudioFileAsResource(filename);
 
-            // Dynamically determine Content-Type from file extension
-            MediaType mediaType = resolveMediaType(filename);
+            // Prefer DB-stored content type for shared assets, fallback to extension mapping.
+            String storedContentType = audioFileStorageService.getStoredContentType(filename);
+            MediaType mediaType = resolveMediaType(filename, storedContentType);
 
             return ResponseEntity.ok()
                     .contentType(mediaType)
@@ -104,7 +106,16 @@ public class AudioAssetController {
     /**
      * Resolves the appropriate MIME type based on the audio file extension.
      */
-    private MediaType resolveMediaType(String filename) {
+    private MediaType resolveMediaType(String filename, String explicitContentType) {
+        if (explicitContentType != null && !explicitContentType.isBlank()) {
+            try {
+                return MediaType.parseMediaType(explicitContentType);
+            } catch (InvalidMediaTypeException e) {
+                logger.warn("Invalid DB content type '{}' for '{}'. Falling back to extension.",
+                        explicitContentType, filename);
+            }
+        }
+
         String lowerFilename = filename.toLowerCase();
 
         if (lowerFilename.endsWith(".mp3")) {
