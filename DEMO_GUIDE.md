@@ -1,3 +1,167 @@
+?????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
+Here’s a complete set of exam‑style Bash scripting questions (31–40) with their full code solutions, each isolated and clearly labeled:
+
+---
+
+31️⃣ Display Top 5 Memory‑Consuming Processes
+Question: Write a script to display the top 5 memory‑consuming processes currently running on the system.  
+(Hint: ps, sort, head, awk)
+
+`bash
+
+!/bin/bash
+echo "Top 5 memory-consuming processes:"
+ps -eo pid,comm,%mem --sort=-%mem | head -n 6
+`
+
+---
+
+32️⃣ Monitor CPU Utilization
+Question: Write a script to monitor the CPU utilization and print a warning message if it continuously exceeds 80% for three consecutive checks (10 seconds apart).  
+(Hint: top or uptime, conditional loops)
+
+`bash
+
+!/bin/bash
+count=0
+while [ $count -lt 3 ]; do
+    cpu=$(uptime | awk -F'load average:' '{print $2}' | awk '{print $1*100/$(nproc)}')
+    if (( ${cpu%.*} > 80 )); then
+        ((count++))
+    else
+        count=0
+    fi
+    sleep 10
+done
+echo "Warning: CPU usage exceeded 80% for 3 consecutive checks!"
+`
+
+---
+
+33️⃣ Backup Modified Files
+Question: Write a script to back up all files in the current directory that were modified in the last 24 hours to a specified archive directory.  
+(Hint: find -mtime -1 and cp)
+
+`bash
+
+!/bin/bash
+read -p "Enter backup directory: " backup_dir
+mkdir -p "$backup_dir"
+find . -type f -mtime -1 -exec cp {} "$backup_dir" \;
+echo "Backup complete in $backup_dir"
+`
+
+---
+
+34️⃣ Delete Zero‑Sized Files
+Question: Write a script to find and delete all zero‑sized files within a specified directory structure. Prompt the user for confirmation before deletion.  
+(Hint: find -size 0c and rm -i)
+
+`bash
+
+!/bin/bash
+read -p "Enter directory: " dir
+find "$dir" -type f -size 0c -exec rm -i {} \;
+`
+
+---
+
+35️⃣ List Executable Files
+Question: Write a script to generate a list of all executable files in the current directory and its subdirectories, printing their full path.  
+(Hint: find -type f -executable)
+
+`bash
+
+!/bin/bash
+echo "Executable files:"
+find . -type f -executable -print
+`
+
+---
+
+36️⃣ Extract Email Addresses
+Question: Write a script to extract all email addresses from a given text file using extended Regular Expressions.  
+(Hint: grep -E with a basic email pattern)
+
+`bash
+
+!/bin/bash
+read -p "Enter file: " file
+grep -E -o "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}" "$file"
+`
+
+---
+
+37️⃣ Print the 10th Line
+Question: Write a script to print the 10th line of a given input file. Implement this in two different ways.  
+(Hint: head/tail and sed -n '10p')
+
+`bash
+
+!/bin/bash
+read -p "Enter file: " file
+
+Method 1: head + tail
+head -n 10 "$file" | tail -n 1
+
+Method 2: sed
+sed -n '10p' "$file"
+`
+
+---
+
+38️⃣ Check User Exists
+Question: Write a script that checks if a specific user exists on the system.  
+(Hint: Check /etc/passwd using grep)
+
+`bash
+
+!/bin/bash
+read -p "Enter username: " user
+if grep -q "^$user:" /etc/passwd; then
+    echo "User $user exists"
+else
+    echo "User $user does not exist"
+fi
+`
+
+---
+
+39️⃣ Disk Space Check
+Question: Write a script to check the available disk space for the root mount point (/) and report if the usage is above 90%.  
+(Hint: df -h and awk for percentage extraction)
+
+`bash
+
+!/bin/bash
+usage=$(df / | awk 'NR==2 {print $5}' | sed 's/%//')
+if [ $usage -gt 90 ]; then
+    echo "Warning: Root disk usage above 90% ($usage%)"
+else
+    echo "Root disk usage is $usage%"
+fi
+`
+
+---
+
+40️⃣ Log Analysis
+Question: Write a script for Log Analysis: Count the total number of lines containing the keyword "ERROR" or "FAILURE" in a specified log file.  
+(Hint: grep -E 'ERROR|FAILURE')
+
+`bash
+
+!/bin/bash
+read -p "Enter log file: " logfile
+count=$(grep -E "ERROR|FAILURE" "$logfile" | wc -l)
+echo "Total ERROR/FAILURE lines: $count"
+`
+
+---
+
+✨ Now you have all questions (31–40) with their full code solutions neatly isolated in one place.  
+
+Would you like me to also prepare a compact cheat sheet table summarizing the key commands used (ps, uptime, df, find, grep, sed, awk) so you can revise them quickly before exams?
+?????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
 # MusicLab — AJT Semester Project Demo Guide
 
 ## Tech Stack
